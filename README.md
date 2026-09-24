@@ -21,6 +21,7 @@ Native objects stay on the main thread. The adapter passes registry IDs between 
 - EdDSA (Ed25519) signature verification
 - Automatic and background update checks
 - Full event system for custom UI integration
+- App-provided "restart to update" prompt for automatically downloaded updates
 - Channel-based updates, custom HTTP headers, phased rollout
 - TypeScript/JavaScript API with full type definitions
 
@@ -133,6 +134,37 @@ await onDidFindValidUpdate((info) => {
   console.log(`Update ${info.version} available!`);
 });
 ```
+
+### Custom install prompt
+
+Sparkle downloads updates silently when `SUAutomaticallyUpdate` is on and installs them when the app quits. To offer "Restart to update" in your own UI instead of Sparkle's reminders, enable it during setup, before Sparkle's first download:
+
+```rust
+.setup(|app| {
+    if let Some(updater) = app.sparkle_updater() {
+        updater.set_handles_install_on_quit(true)?;
+    }
+    Ok(())
+})
+```
+
+```ts
+import {
+  installPendingUpdate,
+  onWillInstallUpdateOnQuit,
+  pendingUpdate,
+} from 'tauri-plugin-sparkle-updater-api';
+
+await onWillInstallUpdateOnQuit(({ version }) => showPrompt(version));
+// The update may have been staged before the listener was attached.
+const pending = await pendingUpdate();
+if (pending) showPrompt(pending.version);
+
+// "Restart now": installs and relaunches without Sparkle UI.
+await installPendingUpdate();
+```
+
+If the user quits instead, Sparkle still installs the update. While an update is pending, Sparkle runs no further checks in that session, and `checkForUpdates()` does nothing: route your "Check for Updates" action to `pendingUpdate()` and `installPendingUpdate()`.
 
 ## Documentation
 

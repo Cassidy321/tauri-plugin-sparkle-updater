@@ -429,4 +429,40 @@ impl SparkleUpdater {
         self.with_delegate(|d| d.set_download_request_headers(headers));
         Ok(())
     }
+
+    pub fn handles_install_on_quit(&self) -> Result<bool> {
+        Ok(self.with_delegate(|d| d.handles_install_on_quit()))
+    }
+
+    /// Takes over updates that Sparkle downloads automatically and stages for
+    /// installation on quit, so the host can offer to install them right away.
+    ///
+    /// Sparkle then stops its own follow-ups for that update: no reminder when
+    /// the app stays open, no immediate presentation of critical updates, and
+    /// no further update checks in this session. It still installs the update
+    /// when the app quits. Enable this before Sparkle finishes its first
+    /// download, and present the update from the `WillInstallUpdateOnQuit`
+    /// event or [`Self::pending_update`].
+    ///
+    /// While an update is pending, [`Self::check_for_updates`] and
+    /// [`Self::check_for_updates_in_background`] do nothing: route the host's
+    /// "Check for Updates" action to [`Self::install_pending_update`] instead.
+    pub fn set_handles_install_on_quit(&self, enabled: bool) -> Result<()> {
+        self.with_delegate(|d| d.set_handles_install_on_quit(enabled));
+        Ok(())
+    }
+
+    /// The update staged for installation on quit while the host handles it.
+    pub fn pending_update(&self) -> Result<Option<UpdateInfo>> {
+        Ok(self.with_delegate(|d| d.pending_update()))
+    }
+
+    /// Installs the pending update and relaunches the app, without Sparkle UI.
+    ///
+    /// Returns `false` when no update is pending. Sparkle terminates the app
+    /// through the regular quit path; if the host cancels that termination,
+    /// calling this again retries.
+    pub fn install_pending_update(&self) -> Result<bool> {
+        Ok(self.with_delegate(|d| d.install_pending_update()))
+    }
 }

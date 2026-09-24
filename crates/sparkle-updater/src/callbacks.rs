@@ -90,6 +90,30 @@ pub(crate) fn postpone_relaunch(
     state.finish_callback()
 }
 
+/// An update Sparkle staged for installation on quit while the host handles
+/// installing it, with Sparkle's block that installs it and relaunches.
+pub(crate) struct PendingInstall {
+    update: UpdateInfo,
+    install: RcBlock<dyn Fn()>,
+}
+
+impl PendingInstall {
+    pub(crate) fn new(update: UpdateInfo, block: &Block<dyn Fn()>) -> Self {
+        Self {
+            update,
+            install: block.copy(),
+        }
+    }
+
+    pub(crate) fn update(&self) -> &UpdateInfo {
+        &self.update
+    }
+
+    pub(crate) fn installer(&self) -> RcBlock<dyn Fn()> {
+        self.install.clone()
+    }
+}
+
 /// Host-provided gentle reminders for scheduled updates.
 ///
 /// Install this delegate before starting the updater. All callbacks run on the

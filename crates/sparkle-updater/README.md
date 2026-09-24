@@ -47,4 +47,6 @@ This hook is not a universal termination veto: Sparkle may install after an ordi
 
 `UpdaterConfig::gentle_reminders` accepts an `Rc<dyn GentleReminders>`. Configure it before startup. Returning `true` from `should_show_scheduled_update` keeps Sparkle's native reminder UI. Returning `false` transfers reminder presentation to the host; implement the trait's lifecycle notifications, present an accessible update affordance, and call `check_for_updates()` when the user activates it.
 
+`set_handles_install_on_quit(true)` hands updates that Sparkle downloaded automatically to the host. Sparkle reports the staged update through `UpdateEvent::WillInstallUpdateOnQuit` and `pending_update()`, stops its reminders and further checks for the session, and still installs the update when the app quits. While an update is pending, `check_for_updates()` does nothing, so route the host's own check action to the pending update. `install_pending_update()` installs and relaunches without Sparkle UI; Sparkle quits the app with a regular Apple quit event, so the host's termination handling applies.
+
 The low-level Objective-C bindings remain private. The public API intentionally wraps the subset needed by the Rust and Tauri integrations rather than mirroring every Sparkle symbol.

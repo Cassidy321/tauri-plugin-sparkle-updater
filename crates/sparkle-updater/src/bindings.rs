@@ -110,9 +110,6 @@ impl SPUUpdater {
 
         #[unsafe(method(startUpdater:))]
         pub fn start_updater(&self, error: *mut *mut NSError) -> bool;
-
-        #[unsafe(method(setDelegate:))]
-        pub fn set_delegate(&self, delegate: Option<&NSObject>);
     );
 }
 

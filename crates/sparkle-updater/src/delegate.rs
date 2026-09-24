@@ -12,7 +12,7 @@ use objc2_foundation::{
 };
 
 use super::bindings::{SPUAppcastItem, SPUUserUpdateState};
-use crate::callbacks::{postpone_relaunch, GentleReminders, RelaunchHandler};
+use crate::callbacks::{postpone_relaunch, GentleReminders, PendingInstall, RelaunchHandler};
 use crate::events::{
     DownloadFailedInfo, ErrorPayload, NoUpdateInfo, NoUpdateReason, ScheduleInfo, UnderlyingError,
     UpdateCycleInfo, UpdateEvent, UpdateInfo, UserChoiceInfo, UserUpdateStage, UserUpdateState,
@@ -35,6 +35,8 @@ pub struct DelegateIvars {
     decryption_password: RefCell<Option<String>>,
     last_found_update: RefCell<Option<UpdateInfo>>,
     download_request_headers: RefCell<Option<HashMap<String, String>>>,
+    handles_install_on_quit: RefCell<bool>,
+    pending_install: RefCell<Option<PendingInstall>>,
 }
 
 define_class!(
@@ -124,6 +126,7 @@ define_class!(
             _updater: &NSObject,
             ns_error: &NSObject,
         ) {
+            self.ivars().pending_install.borrow_mut().take();
             self.emit(UpdateEvent::DidAbortWithError(error_payload(ns_error)));
         }
 
@@ -139,6 +142,8 @@ define_class!(
                 1 => "background",
                 _ => "information",
             };
+            // Sparkle's block is inert once the session that staged it ends.
+            self.ivars().pending_install.borrow_mut().take();
             self.emit(UpdateEvent::DidFinishUpdateCycle(UpdateCycleInfo {
                 update_check: update_check_str.to_string(),
                 error: error.map(error_payload),
@@ -222,20 +227,25 @@ define_class!(
         /// automatically and staged for install on quit. Returning `YES`
         /// hands Sparkle's follow-ups to the host: the reminder it shows when
         /// the app has not quit for `SUScheduledImpatientCheckInterval`, and
-        /// the immediate presentation of critical updates. This notification
-        /// remains informational; custom presentation uses the standard user
-        /// driver's Gentle Reminders callbacks instead.
+        /// the immediate presentation of critical updates. Sparkle then stalls
+        /// its update cycle until the app quits or the host invokes the block.
         #[unsafe(method(updater:willInstallUpdateOnQuit:immediateInstallationBlock:))]
         fn updater_will_install_update_on_quit(
             &self,
             _updater: &NSObject,
             item: &SPUAppcastItem,
-            _handler: &Block<dyn Fn()>,
+            handler: &Block<dyn Fn()>,
         ) -> bool {
+            let handled = *self.ivars().handles_install_on_quit.borrow();
+            if handled {
+                // Stored before emitting so listeners can install right away.
+                *self.ivars().pending_install.borrow_mut() =
+                    Some(PendingInstall::new(update_info_from_item(item), handler));
+            }
             self.emit(UpdateEvent::WillInstallUpdateOnQuit(VersionInfo {
                 version: item.display_version_string().to_string(),
             }));
-            false
+            handled
         }
 
         #[unsafe(method(updater:shouldPostponeRelaunchForUpdate:untilInvokingBlock:))]
@@ -600,6 +610,8 @@ impl SparkleDelegate {
             decryption_password: RefCell::new(None),
             last_found_update: RefCell::new(None),
             download_request_headers: RefCell::new(None),
+            handles_install_on_quit: RefCell::new(false),
+            pending_install: RefCell::new(None),
         });
         unsafe { msg_send![super(this), init] }
     }
@@ -694,6 +706,33 @@ impl SparkleDelegate {
 
     pub fn set_download_request_headers(&self, headers: Option<HashMap<String, String>>) {
         *self.ivars().download_request_headers.borrow_mut() = headers;
+    }
+
+    pub fn handles_install_on_quit(&self) -> bool {
+        *self.ivars().handles_install_on_quit.borrow()
+    }
+
+    pub fn set_handles_install_on_quit(&self, enabled: bool) {
+        *self.ivars().handles_install_on_quit.borrow_mut() = enabled;
+    }
+
+    pub fn pending_update(&self) -> Option<UpdateInfo> {
+        self.ivars()
+            .pending_install
+            .borrow()
+            .as_ref()
+            .map(|pending| pending.update().clone())
+    }
+
+    pub fn install_pending_update(&self) -> bool {
+        // Release the borrow first: the block may reach the delegate again.
+        let installer = self
+            .ivars()
+            .pending_install
+            .borrow()
+            .as_ref()
+            .map(PendingInstall::installer);
+        installer.map(|install| install.call(())).is_some()
     }
 }
 
