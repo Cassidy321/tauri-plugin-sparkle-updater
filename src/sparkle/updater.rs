@@ -274,6 +274,24 @@ impl<R: Runtime> SparkleUpdater<R> {
     ) -> Result<()> {
         self.dispatch(move |updater| updater.set_download_request_headers(headers))
     }
+
+    pub fn handles_install_on_quit(&self) -> Result<bool> {
+        self.dispatch(move |updater| updater.handles_install_on_quit())
+    }
+
+    /// See [`sparkle_updater::SparkleUpdater::set_handles_install_on_quit`].
+    pub fn set_handles_install_on_quit(&self, enabled: bool) -> Result<()> {
+        self.dispatch(move |updater| updater.set_handles_install_on_quit(enabled))
+    }
+
+    pub fn pending_update(&self) -> Result<Option<UpdateInfo>> {
+        self.dispatch(move |updater| updater.pending_update())
+    }
+
+    /// See [`sparkle_updater::SparkleUpdater::install_pending_update`].
+    pub fn install_pending_update(&self) -> Result<bool> {
+        self.dispatch(move |updater| updater.install_pending_update())
+    }
 }
 
 impl<R: Runtime> Drop for SparkleUpdater<R> {

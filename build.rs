@@ -42,6 +42,10 @@ const COMMANDS: &[&str] = &[
     "last_found_update",
     "download_request_headers",
     "set_download_request_headers",
+    "handles_install_on_quit",
+    "set_handles_install_on_quit",
+    "pending_update",
+    "install_pending_update",
 ];
 
 fn main() {

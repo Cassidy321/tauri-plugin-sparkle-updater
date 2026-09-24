@@ -15,8 +15,8 @@ use std::rc::Rc;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{msg_send, MainThreadMarker, MainThreadOnly};
-use objc2_foundation::{NSDictionary, NSString};
+use objc2::{msg_send, ClassType, MainThreadMarker, MainThreadOnly};
+use objc2_foundation::{NSDictionary, NSError, NSString};
 
 use bindings::{SPUAppcastItem, SPUUserUpdateState};
 use callbacks::{GentleReminders, RelaunchContinuation};
@@ -149,6 +149,70 @@ fn main() {
         };
         assert!(!postponed);
         assert_eq!(calls.get(), 1);
-        println!("native selectors: state object, gentle reminders, deferred and synchronous relaunch passed");
+
+        let staged = Rc::new(Cell::new(0));
+        let captured = staged.clone();
+        delegate.set_event_callback(Some(Rc::new(move |event| {
+            if let UpdateEvent::WillInstallUpdateOnQuit(info) = event {
+                assert_eq!(info.version, "2.0");
+                captured.set(captured.get() + 1);
+            }
+        })));
+        let installs = Rc::new(Cell::new(0));
+        let captured = installs.clone();
+        let block = RcBlock::new(move || captured.set(captured.get() + 1));
+        let handled: bool = unsafe {
+            msg_send![&*delegate, updater: &*updater, willInstallUpdateOnQuit: &*item, immediateInstallationBlock: &*block]
+        };
+        assert!(!handled);
+        assert_eq!(staged.get(), 1);
+        assert!(delegate.pending_update().is_none());
+        assert!(!delegate.install_pending_update());
+
+        delegate.set_handles_install_on_quit(true);
+        let reentrant_delegate = delegate.clone();
+        let captured = staged.clone();
+        delegate.set_event_callback(Some(Rc::new(move |event| {
+            if let UpdateEvent::WillInstallUpdateOnQuit(_) = event {
+                let pending = reentrant_delegate
+                    .pending_update()
+                    .expect("stored before emitting");
+                assert_eq!(pending.version, "2.0");
+                assert!(reentrant_delegate.install_pending_update());
+                captured.set(captured.get() + 1);
+            }
+        })));
+        let handled: bool = unsafe {
+            msg_send![&*delegate, updater: &*updater, willInstallUpdateOnQuit: &*item, immediateInstallationBlock: &*block]
+        };
+        assert!(handled);
+        assert_eq!(staged.get(), 2);
+        assert_eq!(installs.get(), 1);
+        drop(block);
+        // Sparkle accepts the block again when the app cancelled termination.
+        assert!(delegate.install_pending_update());
+        assert_eq!(installs.get(), 2);
+        unsafe {
+            let _: () = msg_send![&*delegate, updater: &*updater, didFinishUpdateCycleForUpdateCheck: 1isize, error: None::<&NSObject>];
+        }
+        assert!(delegate.pending_update().is_none());
+        assert!(!delegate.install_pending_update());
+        assert_eq!(installs.get(), 2);
+
+        delegate.set_event_callback(None);
+        let block = RcBlock::new(|| {});
+        let handled: bool = unsafe {
+            msg_send![&*delegate, updater: &*updater, willInstallUpdateOnQuit: &*item, immediateInstallationBlock: &*block]
+        };
+        assert!(handled);
+        let domain = NSString::from_str("SUSparkleErrorDomain");
+        let error: Retained<NSError> = unsafe {
+            msg_send![NSError::class(), errorWithDomain: &*domain, code: 4005isize, userInfo: None::<&NSDictionary>]
+        };
+        unsafe {
+            let _: () = msg_send![&*delegate, updater: &*updater, didAbortWithError: &*error];
+        }
+        assert!(delegate.pending_update().is_none());
+        println!("native selectors: state object, gentle reminders, deferred and synchronous relaunch, install on quit passed");
     });
 }

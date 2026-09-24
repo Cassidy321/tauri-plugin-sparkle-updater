@@ -352,6 +352,41 @@ export async function lastFoundUpdate(): Promise<UpdateInfo | null> {
   return invoke('plugin:sparkle-updater|last_found_update');
 }
 
+export async function handlesInstallOnQuit(): Promise<boolean> {
+  return invoke('plugin:sparkle-updater|handles_install_on_quit');
+}
+
+/**
+ * Takes over updates that Sparkle downloads automatically and stages for
+ * installation on quit, so the app can offer to install them right away.
+ *
+ * Sparkle then stops its own follow-ups for that update (reminders, critical
+ * update prompts, further checks in this session) but still installs it when
+ * the app quits. Present the update from `onWillInstallUpdateOnQuit`, or from
+ * `pendingUpdate()` if it was staged before your listener was attached.
+ *
+ * While an update is pending, `checkForUpdates()` and
+ * `checkForUpdatesInBackground()` do nothing: route your "Check for Updates"
+ * action to `installPendingUpdate()` instead.
+ */
+export async function setHandlesInstallOnQuit(enabled: boolean): Promise<void> {
+  return invoke('plugin:sparkle-updater|set_handles_install_on_quit', { enabled });
+}
+
+/** The update staged for installation on quit while the app handles it. */
+export async function pendingUpdate(): Promise<UpdateInfo | null> {
+  return invoke('plugin:sparkle-updater|pending_update');
+}
+
+/**
+ * Installs the pending update and relaunches the app, without Sparkle UI.
+ * Resolves to `false` when no update is pending. Sparkle quits the app through
+ * the regular quit path; if the app cancels it, calling this again retries.
+ */
+export async function installPendingUpdate(): Promise<boolean> {
+  return invoke('plugin:sparkle-updater|install_pending_update');
+}
+
 export const Events = {
   DID_FINISH_LOADING_APPCAST: 'sparkle://did-finish-loading-appcast',
   DID_FIND_VALID_UPDATE: 'sparkle://did-find-valid-update',
@@ -395,8 +430,8 @@ export const onWillScheduleUpdateCheck = createListener<WillScheduleUpdateCheckP
 export const onWillNotScheduleUpdateCheck = createListener<WillNotScheduleUpdateCheckPayload>(Events.WILL_NOT_SCHEDULE_UPDATE_CHECK);
 /**
  * An automatically downloaded update has been staged and will be installed
- * when the app quits. Informational: Sparkle keeps responsibility for the
- * install and for reminding the user if the app stays open for a long time.
+ * when the app quits. Sparkle keeps reminding the user if the app stays open
+ * for a long time, unless `setHandlesInstallOnQuit(true)` hands that to you.
  */
 export const onWillInstallUpdateOnQuit = createListener<WillInstallUpdateOnQuitPayload>(Events.WILL_INSTALL_UPDATE_ON_QUIT);
 
