@@ -84,6 +84,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::set_handles_install_on_quit,
             commands::pending_update,
             commands::install_pending_update,
+            commands::download_update_in_background,
         ])
         .setup(|app, _api| {
             if let Some(sparkle_updater) = sparkle::init(app)? {

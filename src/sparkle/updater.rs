@@ -292,6 +292,11 @@ impl<R: Runtime> SparkleUpdater<R> {
     pub fn install_pending_update(&self) -> Result<bool> {
         self.dispatch(move |updater| updater.install_pending_update())
     }
+
+    /// See [`sparkle_updater::SparkleUpdater::download_update_in_background`].
+    pub fn download_update_in_background(&self) -> Result<bool> {
+        self.dispatch(move |updater| updater.download_update_in_background())
+    }
 }
 
 impl<R: Runtime> Drop for SparkleUpdater<R> {

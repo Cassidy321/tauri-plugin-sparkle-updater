@@ -46,6 +46,7 @@ const COMMANDS: &[&str] = &[
     "set_handles_install_on_quit",
     "pending_update",
     "install_pending_update",
+    "download_update_in_background",
 ];
 
 fn main() {

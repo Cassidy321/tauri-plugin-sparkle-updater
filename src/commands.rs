@@ -313,3 +313,8 @@ pub(crate) async fn pending_update<R: Runtime>(app: AppHandle<R>) -> Result<Opti
 pub(crate) async fn install_pending_update<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
     get_updater!(app).install_pending_update()
 }
+
+#[command]
+pub(crate) async fn download_update_in_background<R: Runtime>(app: AppHandle<R>) -> Result<bool> {
+    get_updater!(app).download_update_in_background()
+}

@@ -8,6 +8,7 @@ mod callbacks;
 mod delegate;
 #[allow(unused_imports)]
 mod events;
+mod silent_download;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -15,8 +16,8 @@ use std::rc::Rc;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{msg_send, ClassType, MainThreadMarker, MainThreadOnly};
-use objc2_foundation::{NSDictionary, NSError, NSString};
+use objc2::{define_class, msg_send, ClassType, DeclaredClass, MainThreadMarker, MainThreadOnly};
+use objc2_foundation::{NSDictionary, NSError, NSString, NSUserDefaults};
 
 use bindings::{SPUAppcastItem, SPUUserUpdateState};
 use callbacks::{GentleReminders, RelaunchContinuation};
@@ -35,6 +36,42 @@ fn update_item(mtm: MainThreadMarker) -> Retained<SPUAppcastItem> {
     // constructs a real Sparkle item without requiring a network update cycle.
     unsafe { msg_send![SPUAppcastItem::alloc(mtm), initWithDictionary: &*dict] }
 }
+
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "FakeSparkleUpdater"]
+    #[ivars = Cell<Option<bool>>]
+    struct FakeUpdater;
+
+    impl FakeUpdater {
+        #[unsafe(method(setAutomaticallyDownloadsUpdates:))]
+        fn set_automatically_downloads_updates(&self, enabled: bool) {
+            self.ivars().set(Some(enabled));
+        }
+    }
+);
+
+impl FakeUpdater {
+    fn new(mtm: MainThreadMarker) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(Cell::new(None));
+        unsafe { msg_send![super(this), init] }
+    }
+
+    fn take_automatic_downloads(&self) -> Option<bool> {
+        self.ivars().take()
+    }
+}
+
+fn user_default(key: &str) -> Option<bool> {
+    let defaults = NSUserDefaults::standardUserDefaults();
+    let key = NSString::from_str(key);
+    defaults
+        .objectForKey(&key)
+        .map(|_| defaults.boolForKey(&key))
+}
+
+const RESTORE_KEY: &str = "SparkleUpdaterRestoreAutomaticDownloads";
 
 struct Reminders {
     shown: Cell<bool>,
@@ -213,6 +250,43 @@ fn main() {
             let _: () = msg_send![&*delegate, updater: &*updater, didAbortWithError: &*error];
         }
         assert!(delegate.pending_update().is_none());
-        println!("native selectors: state object, gentle reminders, deferred and synchronous relaunch, install on quit passed");
+
+        let fake = FakeUpdater::new(mtm);
+        assert!(!delegate.set_silent_download_restores(true));
+        delegate.begin_silent_download(false);
+        assert_eq!(user_default(RESTORE_KEY), Some(false));
+        assert!(delegate.set_silent_download_restores(true));
+        assert_eq!(delegate.silent_download_restores(), Some(true));
+        assert_eq!(user_default(RESTORE_KEY), Some(true));
+        let block = RcBlock::new(|| {});
+        let _: bool = unsafe {
+            msg_send![&*delegate, updater: &*fake, willInstallUpdateOnQuit: &*item, immediateInstallationBlock: &*block]
+        };
+        assert_eq!(fake.take_automatic_downloads(), Some(true));
+        assert_eq!(delegate.silent_download_restores(), None);
+        assert_eq!(user_default(RESTORE_KEY), None);
+        unsafe {
+            let _: () = msg_send![&*delegate, updater: &*fake, didFinishUpdateCycleForUpdateCheck: 1isize, error: None::<&NSObject>];
+        }
+        assert_eq!(fake.take_automatic_downloads(), None);
+
+        delegate.begin_silent_download(false);
+        unsafe {
+            let _: () = msg_send![&*delegate, updater: &*fake, didFinishUpdateCycleForUpdateCheck: 1isize, error: None::<&NSObject>];
+        }
+        assert_eq!(fake.take_automatic_downloads(), Some(false));
+        assert_eq!(user_default(RESTORE_KEY), None);
+
+        let automatically_update = NSString::from_str("SUAutomaticallyUpdate");
+        NSUserDefaults::standardUserDefaults().setBool_forKey(true, &automatically_update);
+        silent_download::remember(false);
+        silent_download::restore_interrupted();
+        assert_eq!(user_default("SUAutomaticallyUpdate"), Some(false));
+        assert_eq!(user_default(RESTORE_KEY), None);
+        silent_download::restore_interrupted();
+        assert_eq!(user_default("SUAutomaticallyUpdate"), Some(false));
+        NSUserDefaults::standardUserDefaults().removeObjectForKey(&automatically_update);
+
+        println!("native selectors: state object, gentle reminders, deferred and synchronous relaunch, install on quit, silent download passed");
     });
 }

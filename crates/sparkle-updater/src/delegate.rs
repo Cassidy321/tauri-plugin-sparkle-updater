@@ -18,6 +18,7 @@ use crate::events::{
     UpdateCycleInfo, UpdateEvent, UpdateInfo, UserChoiceInfo, UserUpdateStage, UserUpdateState,
     VersionInfo,
 };
+use crate::silent_download;
 
 pub type EventCallback = Rc<dyn Fn(UpdateEvent)>;
 
@@ -37,6 +38,7 @@ pub struct DelegateIvars {
     download_request_headers: RefCell<Option<HashMap<String, String>>>,
     handles_install_on_quit: RefCell<bool>,
     pending_install: RefCell<Option<PendingInstall>>,
+    silent_download_restores: RefCell<Option<bool>>,
 }
 
 define_class!(
@@ -133,10 +135,11 @@ define_class!(
         #[unsafe(method(updater:didFinishUpdateCycleForUpdateCheck:error:))]
         fn updater_did_finish_update_cycle(
             &self,
-            _updater: &NSObject,
+            updater: &NSObject,
             update_check: isize,
             error: Option<&NSObject>,
         ) {
+            self.end_silent_download(updater);
             let update_check_str = match update_check {
                 0 => "userInitiated",
                 1 => "background",
@@ -232,10 +235,13 @@ define_class!(
         #[unsafe(method(updater:willInstallUpdateOnQuit:immediateInstallationBlock:))]
         fn updater_will_install_update_on_quit(
             &self,
-            _updater: &NSObject,
+            updater: &NSObject,
             item: &SPUAppcastItem,
             handler: &Block<dyn Fn()>,
         ) -> bool {
+            // A handled update stalls the cycle until the app quits, so the
+            // cycle's end can't be the only place a silent download ends.
+            self.end_silent_download(updater);
             let handled = *self.ivars().handles_install_on_quit.borrow();
             if handled {
                 // Stored before emitting so listeners can install right away.
@@ -612,6 +618,7 @@ impl SparkleDelegate {
             download_request_headers: RefCell::new(None),
             handles_install_on_quit: RefCell::new(false),
             pending_install: RefCell::new(None),
+            silent_download_restores: RefCell::new(None),
         });
         unsafe { msg_send![super(this), init] }
     }
@@ -733,6 +740,37 @@ impl SparkleDelegate {
             .as_ref()
             .map(PendingInstall::installer);
         installer.map(|install| install.call(())).is_some()
+    }
+
+    /// The automatic downloads setting a silent download restores when its
+    /// update cycle ends, while one is in progress.
+    pub fn silent_download_restores(&self) -> Option<bool> {
+        *self.ivars().silent_download_restores.borrow()
+    }
+
+    pub fn begin_silent_download(&self, restores: bool) {
+        silent_download::remember(restores);
+        *self.ivars().silent_download_restores.borrow_mut() = Some(restores);
+    }
+
+    /// Returns `false` when no silent download is in progress.
+    pub fn set_silent_download_restores(&self, enabled: bool) -> bool {
+        let mut restores = self.ivars().silent_download_restores.borrow_mut();
+        if restores.is_none() {
+            return false;
+        }
+        *restores = Some(enabled);
+        silent_download::remember(enabled);
+        true
+    }
+
+    fn end_silent_download(&self, updater: &NSObject) {
+        let restores = self.ivars().silent_download_restores.borrow_mut().take();
+        let Some(enabled) = restores else {
+            return;
+        };
+        let _: () = unsafe { msg_send![updater, setAutomaticallyDownloadsUpdates: enabled] };
+        silent_download::forget();
     }
 }
 

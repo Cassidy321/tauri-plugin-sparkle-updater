@@ -66,6 +66,9 @@ impl SPUUpdater {
         #[unsafe(method(setAutomaticallyDownloadsUpdates:))]
         pub fn set_automatically_downloads_updates(&self, enabled: bool);
 
+        #[unsafe(method(allowsAutomaticUpdates))]
+        pub fn allows_automatic_updates(&self) -> bool;
+
         #[unsafe(method(lastUpdateCheckDate))]
         pub fn last_update_check_date(&self) -> Option<Retained<NSDate>>;
 
