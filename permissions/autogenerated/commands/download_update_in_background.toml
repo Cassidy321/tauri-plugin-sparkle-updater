@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-download-update-in-background"
+description = "Enables the download_update_in_background command without any pre-configured scope."
+commands.allow = ["download_update_in_background"]
+
+[[permission]]
+identifier = "deny-download-update-in-background"
+description = "Denies the download_update_in_background command without any pre-configured scope."
+commands.deny = ["download_update_in_background"]

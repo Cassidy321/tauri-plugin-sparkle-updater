@@ -387,6 +387,24 @@ export async function installPendingUpdate(): Promise<boolean> {
   return invoke('plugin:sparkle-updater|install_pending_update');
 }
 
+/**
+ * Checks for updates in the background and downloads any update found without
+ * Sparkle UI, as automatic downloads would. Use it when the user accepts an
+ * update found by `checkForUpdateInformation()`.
+ *
+ * Automatic downloads are turned on for this update cycle only, and restored
+ * when the update is staged or the cycle ends (or at the next launch if the app
+ * quits first). The downloaded update is staged like an automatic one: with
+ * `setHandlesInstallOnQuit(true)`, present it from `onWillInstallUpdateOnQuit`.
+ *
+ * Resolves to `false` without checking when an update session is in progress.
+ * Rejects when Sparkle doesn't allow automatic downloads, which with automatic
+ * checks off takes `SUAllowsAutomaticUpdates` in Info.plist.
+ */
+export async function downloadUpdateInBackground(): Promise<boolean> {
+  return invoke('plugin:sparkle-updater|download_update_in_background');
+}
+
 export const Events = {
   DID_FINISH_LOADING_APPCAST: 'sparkle://did-finish-loading-appcast',
   DID_FIND_VALID_UPDATE: 'sparkle://did-find-valid-update',

@@ -10,6 +10,7 @@ use objc2_foundation::{NSBundle, NSDictionary, NSError, NSString, NSURL};
 
 use super::bindings::{SPUStandardUpdaterController, SPUUpdater};
 use super::delegate::{EventCallback, SparkleDelegate};
+use super::silent_download;
 use crate::events::UpdateInfo;
 use crate::{Error, GentleReminders, RelaunchHandler, Result};
 
@@ -66,6 +67,7 @@ fn initialize(mtm: MainThreadMarker, config: UpdaterConfig) -> Result<Option<Spa
     }
 
     check_info_plist_keys();
+    silent_download::restore_interrupted();
 
     let delegate = SparkleDelegate::new(mtm);
     delegate.set_event_callback(config.event_callback);
@@ -220,13 +222,52 @@ impl SparkleUpdater {
         Ok(())
     }
 
+    /// During [`Self::download_update_in_background`], reports the setting it
+    /// will restore rather than the temporary one.
     pub fn automatically_downloads_updates(&self) -> Result<bool> {
+        if let Some(restores) = self.with_delegate(|d| d.silent_download_restores()) {
+            return Ok(restores);
+        }
         Ok(self.with_controller(|c| c.updater().automatically_downloads_updates()))
     }
 
+    /// During [`Self::download_update_in_background`], the new value applies
+    /// when its update cycle ends.
     pub fn set_automatically_downloads_updates(&self, enabled: bool) -> Result<()> {
+        if self.with_delegate(|d| d.set_silent_download_restores(enabled)) {
+            return Ok(());
+        }
         self.with_controller(|c| c.updater().set_automatically_downloads_updates(enabled));
         Ok(())
+    }
+
+    /// Checks for updates in the background and downloads any update found
+    /// without Sparkle UI, as automatic downloads would. Use it when the user
+    /// accepts an update found by [`Self::check_for_update_information`].
+    ///
+    /// Automatic downloads are turned on for this update cycle only. The
+    /// setting is restored when the update is staged for installation on quit
+    /// or the cycle ends, or at the next launch if the app quits first. The
+    /// downloaded update is staged like an automatic one: with
+    /// [`Self::set_handles_install_on_quit`], present it from the
+    /// `WillInstallUpdateOnQuit` event.
+    ///
+    /// Returns `false` without checking when an update session is in progress.
+    /// Fails when Sparkle doesn't allow automatic downloads, which with
+    /// automatic checks off takes `SUAllowsAutomaticUpdates` in Info.plist.
+    pub fn download_update_in_background(&self) -> Result<bool> {
+        let updater = self.controller.updater();
+        if updater.session_in_progress() {
+            return Ok(false);
+        }
+        if !updater.allows_automatic_updates() {
+            return Err(Error::AutomaticDownloadsNotAllowed);
+        }
+        self.delegate
+            .begin_silent_download(updater.automatically_downloads_updates());
+        updater.set_automatically_downloads_updates(true);
+        updater.check_for_updates_in_background();
+        Ok(true)
     }
 
     pub fn last_update_check_date(&self) -> Result<Option<f64>> {

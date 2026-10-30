@@ -51,6 +51,7 @@ Default permissions for the Sparkle updater plugin
 - `allow-set-handles-install-on-quit`
 - `allow-pending-update`
 - `allow-install-pending-update`
+- `allow-download-update-in-background`
 
 ## Permission Table
 
@@ -343,6 +344,32 @@ Enables the download_request_headers command without any pre-configured scope.
 <td>
 
 Denies the download_request_headers command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sparkle-updater:allow-download-update-in-background`
+
+</td>
+<td>
+
+Enables the download_update_in_background command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`sparkle-updater:deny-download-update-in-background`
+
+</td>
+<td>
+
+Denies the download_update_in_background command without any pre-configured scope.
 
 </td>
 </tr>

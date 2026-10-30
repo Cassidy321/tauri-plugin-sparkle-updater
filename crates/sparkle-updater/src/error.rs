@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("Updater not ready")]
     UpdaterNotReady,
+
+    #[error("Sparkle doesn't allow automatic downloads: with automatic checks off, set SUAllowsAutomaticUpdates in Info.plist")]
+    AutomaticDownloadsNotAllowed,
 }
 
 impl Serialize for Error {

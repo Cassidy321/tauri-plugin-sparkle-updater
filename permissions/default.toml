@@ -47,5 +47,6 @@ permissions = [
     "allow-handles-install-on-quit",
     "allow-set-handles-install-on-quit",
     "allow-pending-update",
-    "allow-install-pending-update"
+    "allow-install-pending-update",
+    "allow-download-update-in-background"
 ]

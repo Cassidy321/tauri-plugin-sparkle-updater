@@ -6,6 +6,7 @@ mod callbacks;
 mod delegate;
 mod error;
 pub mod events;
+mod silent_download;
 mod updater;
 
 pub use callbacks::{GentleReminders, RelaunchContinuation, RelaunchHandler};

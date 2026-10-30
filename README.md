@@ -166,6 +166,26 @@ await installPendingUpdate();
 
 If the user quits instead, Sparkle still installs the update. While an update is pending, Sparkle runs no further checks in that session, and `checkForUpdates()` does nothing: route your "Check for Updates" action to `pendingUpdate()` and `installPendingUpdate()`.
 
+### Ask before downloading
+
+Sparkle installs on quit any update it downloaded automatically. To let users refuse an update without Sparkle's windows, keep automatic downloads off, find updates with `checkForUpdateInformation()`, and download only once the user agrees:
+
+```ts
+import {
+  checkForUpdateInformation,
+  downloadUpdateInBackground,
+  onDidFindValidUpdate,
+} from 'tauri-plugin-sparkle-updater-api';
+
+await onDidFindValidUpdate(({ version }) => offerUpdate(version));
+await checkForUpdateInformation();
+
+// The user accepted: download silently, then present it like above.
+await downloadUpdateInBackground();
+```
+
+`downloadUpdateInBackground()` turns automatic downloads on for that update cycle only. The setting comes back when the update is staged or the cycle ends, or at the next launch if the app quits first. If your app turns Sparkle's automatic checks off to schedule its own, Sparkle also disallows automatic downloads unless `SUAllowsAutomaticUpdates` is set in Info.plist.
+
 ## Documentation
 
 - [API Reference (docs.rs)](https://docs.rs/tauri-plugin-sparkle-updater) - Rust API documentation

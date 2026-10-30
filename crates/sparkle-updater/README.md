@@ -49,4 +49,6 @@ This hook is not a universal termination veto: Sparkle may install after an ordi
 
 `set_handles_install_on_quit(true)` hands updates that Sparkle downloaded automatically to the host. Sparkle reports the staged update through `UpdateEvent::WillInstallUpdateOnQuit` and `pending_update()`, stops its reminders and further checks for the session, and still installs the update when the app quits. While an update is pending, `check_for_updates()` does nothing, so route the host's own check action to the pending update. `install_pending_update()` installs and relaunches without Sparkle UI; Sparkle quits the app with a regular Apple quit event, so the host's termination handling applies.
 
+`download_update_in_background()` checks in the background and downloads any update found without Sparkle UI, as automatic downloads would, so the host can ask before downloading. It turns automatic downloads on for that update cycle only and restores the setting when the update is staged or the cycle ends, or at the next launch if the app quits first. With automatic checks off, Sparkle allows automatic downloads only when `SUAllowsAutomaticUpdates` is set in Info.plist.
+
 The low-level Objective-C bindings remain private. The public API intentionally wraps the subset needed by the Rust and Tauri integrations rather than mirroring every Sparkle symbol.
